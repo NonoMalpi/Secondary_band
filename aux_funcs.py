@@ -31,7 +31,7 @@ def compute_mcs_amer_option(S,K, pol_degree):
 	#LSM algorithm
 	V = np.copy(h)
 	#Iterate from M-1 to 0
-	for t in range(M-2, 0, -1):
+	for t in range(M-2, -1, -1):
 		#Least-square regression to estimate V[t+1] based on S[t]
 		reg = np.polyfit(S[t], V[t+1], pol_degree)
 		#For the coefficients obatined, evaluated reg*S[t] to obtain an expected value
@@ -41,6 +41,6 @@ def compute_mcs_amer_option(S,K, pol_degree):
 		#maximum between the expected continuation value and the payoff h at t
 		V[t] = np.where(C>h[t], V[t+1], h[t])
 	#MCS estimator
-	C0 = 1/I * np.sum(V[1])
+	C0 = 1/I * np.sum(V[0])
 
 	return C0
