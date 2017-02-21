@@ -44,3 +44,12 @@ def compute_mcs_amer_option(S,K, pol_degree):
 	C0 = 1/I * np.sum(V[0])
 
 	return C0
+
+class american_option(object):
+	def __init__(self, M, I, std, date, df):
+		self.M = M
+		self.I = I
+		self.std = std
+		self.date = date
+		self.df = df
+	def generate_random_paths
