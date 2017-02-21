@@ -52,4 +52,12 @@ class american_option(object):
 		self.std = std
 		self.date = date
 		self.df = df
-	def generate_random_paths
+		self.__index = np.flatnonzero(self.df.index == self.date)[0]
+		self.__base_values = self.df.iloc[self.__index:self.__index+self.M]['S_pred'].values
+	def generate_random_paths(self):
+		return generate_sn(self.M, self.I, self.std)
+	def plot_real_predicted_values(self):
+		#Plot real and predicted values from model without noise
+		self.df.iloc[self.__index:self.__index+self.M][['S', 'S_pred']].plot(figsize=(12,4))
+
+
