@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+
 
 def generate_sn(M,I,std):
 	"""
@@ -46,18 +48,50 @@ def compute_mcs_amer_option(S,K, pol_degree):
 	return C0
 
 class american_option(object):
-	def __init__(self, M, I, std, date, df):
+	def __init__(self, df, M, I, std):
+		self.df = df
 		self.M = M
 		self.I = I
 		self.std = std
-		self.date = date
-		self.df = df
-		self.__index = np.flatnonzero(self.df.index == self.date)[0]
-		self.__base_values = self.df.iloc[self.__index:self.__index+self.M]['S_pred'].values
-	def generate_random_paths(self):
-		return generate_sn(self.M, self.I, self.std)
-	def plot_real_predicted_values(self):
+	def plot_real_predicted_values(self, date):
 		#Plot real and predicted values from model without noise
+		self.__index = np.flatnonzero(self.df.index == date)[0]
 		self.df.iloc[self.__index:self.__index+self.M][['S', 'S_pred']].plot(figsize=(12,4))
+	def generate_random_paths(self, date, generate_random_func):
+		self.__index = np.flatnonzero(self.df.index == date)[0]
+		base_mc = self.df.iloc[self.__index:self.__index+self.M]['S_pred'].values
+		#Random paths
+		estimations_mc = base_mc.reshape(-1,1) * np.exp(generate_random_func(self.M, self.I, self.std))
+		estimations_mc = pd.DataFrame(data=estimations_mc, index=self.df.iloc[self.__index:self.__index+self.M].index)
+		estimations_mc['mean'] = estimations_mc.mean(axis=1)
+		estimations_mc['S_pred'] = base_mc
+		estimations_mc['S_true'] = self.df.iloc[self.__index:self.__index+self.M]['S']
+		self.df_mc = estimations_mc
+		return self.df_mc
+	def plot_montecarlo(self):
+		#Plot a Monte Carlo sample of the paths generated
+		fig, ax = plt.subplots(1,1, figsize=(20,8))
+		self.df_mc.iloc[:, :int(self.I/100)].plot(alpha=0.2, legend=False, ax=ax)
+		self.df_mc[['S_true', 'S_pred']].plot(lw=2.5, ax=ax, color=('red','blue'))
+		self.df_mc[['mean']].plot(lw=2.5, color='black', linestyle='--', ax=ax)
+	def compute_option_value (self, K, pol_degree, compute_value_option_func):
+		#Compute the option value for a given strike (electric valuation) or a list of strikes
+		S = self.df_mc.iloc[:,:self.I].values
+		if type(K) == int:
+			return compute_value_option_func(S,K,pol_degree)
+		else:
+			C_list = list()
+			for k in K:
+				C_list.append(compute_value_option_func(S,k,pol_degree))
+			return C_list
+	def plot_delta_option(self, K_list, C_list):
+		fig, axis = plt.subplots(1,1, figsize=(10,7))
+		axis.plot(K_list, C_list)
+		axis.set_title('Delta of American option')
+		axis.set_xlabel('Strike price $K$')
+		axis.set_ylabel('Option value $€/MW$')
+
+
+
 
 
