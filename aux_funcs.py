@@ -92,6 +92,17 @@ class american_option(object):
 		axis.set_ylabel('Option value $€/MW$')
 
 
+#class secondary_band_model(object):
+#	def __init__(self, rf_band, arima_band, bernoulli_prob, rf_reserve, arima_reserve):
+#		self.rf_band = rf_band
+#		self.arima_band = arima_band
+#		self.bernoulli_prob = bernoulli_prob
+#		self.rf_reserve = rf_reserve
+#		self.arima_reserve = arima_reserve
+#	def generate_baseline_models(self, ):
+		#Generate the two baseline models, band and reserve
+
+
 
 
 
