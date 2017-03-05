@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
+import datetime
 
 
 class generate_model(object):
 	def __init__(self, df_list, name_list):
-		self.df_list = [get_clean_data(df, name) for df, name in zip(df_list, name_list)]
-	def get_clean_data(self, df_original, name):
+		self.df_list = [self.__get_clean_data(df, name) for df, name in zip(df_list, name_list)]
+	def __get_clean_data(self, df_original, name):
 		weekday_dict = {
 			0:'Wd', 1:'Wd', 2:'Wd', 3:'Wd', 4:'Wd', 5:'F', 6:'F' 
 		}
