@@ -93,6 +93,3 @@ class american_option(object):
 		axis.set_title('Delta of American option')
 		axis.set_xlabel('Strike price $K$')
 		axis.set_ylabel('Option value $€/MW$')
-
-
-

@@ -97,8 +97,9 @@ class generate_df(object):
 
 class train_model(object):
 
-	def __init__(self, df, output, features_to_remove, n_folds):
+	def __init__(self, df, features, output, features_to_remove, n_folds):
 		self.df = df
+		self.features = features
 		self.output = output
 		self.features_to_remove = features_to_remove
 		self.n_folds = n_folds
@@ -108,7 +109,7 @@ class train_model(object):
 																random_state=0)
 
 	def __divide_features_output(self):
-		X = self.df.drop(labels=self.features_to_remove + [self.output], axis=1).values
+		X = self.df[self.features].values
 		Y = self.df[self.output].values
 		return X, Y
 
