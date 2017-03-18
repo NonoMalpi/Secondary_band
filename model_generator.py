@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime
 
-from sklearn.model_selection import KFold, train_test_split
+from sklearn.model_selection import KFold, GroupKFold, train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 
@@ -45,11 +45,8 @@ class generate_df(object):
 		clean_df = clean_df[~clean_df.index.duplicated()]
 		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
 		clean_df = clean_df.rename(columns={'value':name})
-		clean_df_freq = clean_df.asfreq('H')
-		#if name in ['france', 'morocco', 'portugal']:
-		#	clean_df_freq[name] = np.where(clean_df_freq[name].isnull(), 0, clean_df_freq[name])
 
-		return clean_df_freq
+		return clean_df
 
 	def __return_merged_df(self):
 		"""
@@ -87,6 +84,7 @@ class generate_df(object):
 		for feature in custom_list_1_24:
 			df[feature + '-1'] = df[feature].shift(periods=1)
 			df[feature + '-24'] = df[feature].shift(periods=24)
+			df[feature + '_mov_aver_24'] = pd.rolling_mean(df[feature], window=24)
 
 		for feature in name_list_24:
 			df[feature + '-24'] = df[feature].shift(periods=24)
@@ -97,28 +95,51 @@ class generate_df(object):
 
 class train_model(object):
 
-	def __init__(self, df, output, features_to_remove, n_folds):
+	def __init__(self, df, output, features_to_remove, n_folds, cv_type='normal'):
 		self.df = df
 		self.output = output
 		self.features_to_remove = features_to_remove
 		self.n_folds = n_folds
 		self.X, self.Y = self.__divide_features_output()
-		self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(self.X, self.Y,
-																train_size=0.8, test_size=0.2, 
-																random_state=0)
+		self.cv_type = cv_type
+		self.x_train, self.x_test, self.y_train, self.y_test = self._get_train_test_cv_type()
 
 	def __divide_features_output(self):
 		X = self.df.drop(labels=self.features_to_remove + [self.output], axis=1).values
 		Y = self.df[self.output].values
 		return X, Y
 
+	def _get_train_test_cv_type(self):
+		if self.cv_type == 'group':
+			gkf = GroupKFold(n_splits=self.n_folds)
+
+			#Date as a group
+			groups_for_train_test_split = self.df.index.date
+
+			train_idx, test_idx = list(gkf.split(self.X, self.Y, groups=groups_for_train_test_split))[0]
+
+			x_train, y_train = self.X[train_idx], self.Y[train_idx]
+			x_test, y_test = self.X[test_idx], self.Y[test_idx]
+
+			groups_for_cv = self.df.iloc[train_idx].index.date
+
+			self.cv = list(gkf.split(x_train, y_train, groups_for_cv))
+		else:
+			kf = KFold(n_splits=self.n_folds, random_state=0, shuffle=True)
+
+			x_train, x_test, y_train, y_test = train_test_split(self.X, self.Y, train_size=0.8, test_size=0.2, random_state=0)
+
+			self.cv = list(kf.split(x_train, y_train))
+
+		return x_train, x_test, y_train, y_test
+
 	def obtain_cv_score(self, pipeline):
-		kf = KFold(n_splits=self.n_folds, random_state=0)
 
 		CV_mse = list()
 		CV_mae = list()
 
-		for train_index, test_index in kf.split(self.x_train, self.y_train):
+		for fold, (train_index, test_index) in enumerate(self.cv):
+			print('Acting on fold %i' %(fold+1))
 			pipeline.fit(self.x_train[train_index], self.y_train[train_index])
 			output_pred = pipeline.predict(self.x_train[test_index])
 			CV_mae.append(mean_absolute_error(self.y_train[test_index], output_pred))
