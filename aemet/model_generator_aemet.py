@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime
+from itertools import compress 
 
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
@@ -95,6 +96,9 @@ class generate_df(object):
 
 		return df
 
+
+
+
 class train_model(object):
 
 	def __init__(self, df, features, output, features_to_remove, n_folds):
@@ -113,8 +117,22 @@ class train_model(object):
 		Y = self.df[self.output].values
 		return X, Y
 
+	def _get_vocabulary_dense_matrix(self):
+
+		voc = self.pipeline.steps[0][1].get_feature_names()
+		selected_voc = self.pipeline.steps[1][1].get_support()
+		voc_coef = pd.DataFrame(self.pipeline.steps[2][1].coef_,
+								index=list(compress(voc, selected_voc))).rename(columns={0:'coef'})\
+								.sort('coef', ascending=False)
+
+		sparse_matrix = self.pipeline.steps[0][1].fit_transform(self.df[self.features].values)
+		all_voc = self.pipeline.steps[0][1].get_feature_names()
+		dense_df = pd.DataFrame(sparse_matrix.todense(), columns=all_voc, index=self.df.index)
+
+		return voc_coef, dense_df
+
 	def obtain_cv_score(self, pipeline):
-		kf = KFold(n_splits=self.n_folds, random_state=0)
+		kf = KFold(n_splits=self.n_folds, random_state=0, shuffle=True)
 
 		CV_mse = list()
 		CV_mae = list()
@@ -142,16 +160,17 @@ class train_model(object):
 
 		self.pipeline = pipeline
 		self.errors_df = errors_df
+		self.vocab_coef, self.sample_dense_vocab = self._get_vocabulary_dense_matrix()
 
-	def plot_histogram_error(self):
+
+	def plot_histogram_error(self, alpha):
 		fig, ax = plt.subplots(1,1, figsize=(10,7))
 		self.errors_df.hist(column='error', bins=int(np.sqrt(len(self.errors_df))),
-							ax=ax, normed=True);
+							ax=ax, normed=True, alpha=alpha);
 
-	def plot_feature_importance(self):
-		fig, ax = plt.subplots(1,1, figsize=(10,15))
-		pd.DataFrame(self.pipeline.feature_importances_, index=self.df.drop(labels=self.features_to_remove
-					+ [self.output], axis=1).columns.tolist()).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+	def return_largest_tf(self, date, nums):
+		print(self.sample_dense_vocab.loc[date].nlargest(nums))
+
 
 class metamodel(object):
 	def __init__(self, features, pipeline, n_folds, num_cv, metric):
@@ -189,7 +208,7 @@ class metamodel(object):
 
 			for fold, (train_index, test_index) in enumerate(cv.split(X, y_train)):
 				
-				print('Acting in fold %i on' %(fold+1), random_number+1)
+				print('Acting on fold %i of' %(fold+1), random_number+1)
 
 				self.pipeline.fit(X[train_index], y_train[train_index])
 				
