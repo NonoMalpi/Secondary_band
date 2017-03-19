@@ -1,0 +1,21 @@
+{
+    "spot" : "2014_2016_training_files/export_spot.csv",
+    "band" : "2014_2016_training_files/export_precio_banda_regulacion_secundaria.csv",
+    "reserve" : "2014_2016_training_files/export_precio_regulacion_secundaria_subir.csv",
+    "reserve_energy" : "2014_2016_training_files/export_energia_utilizada_regulacion_secundaria.csv",
+    "coal" : "2014_2016_training_files/export_generacion_programada_pvp_carbon.csv",
+    "ccgt" : "2014_2016_training_files/export_generacion_programada_pvp_ciclo_combinado.csv",
+    "wind" : "2014_2016_training_files/export_generacion_programada_pvp_eolica.csv",
+    "nuclear" : "2014_2016_training_files/export_generacion_programada_pvp_nuclear.csv",
+    "hidraulic_ugh" : "2014_2016_training_files/export_generacion_programada_pvp_hidraulica_UGH.csv",
+    "hidraulic_no_ugh" : "2014_2016_training_files/export_generacion_programada_pvp_hidraulica_no_UGH.csv",
+    "installed_ugh" : "2014_2016_training_files/export_potencia_disponible_generacion_hidraulica_UGH.csv",
+    "demand" : "2014_2016_training_files/export_demanda_programada_pvp_total.csv",
+    "spot_energy" : "2014_2016_training_files/export_energia_asignada_mercado_spot.csv",
+    "programed_demand" : "2014_2016_training_files/export_demanda_programada.csv",
+    "forecasted_wind" : "2014_2016_training_files/export_prevision_eolica.csv",
+    "forecasted_solar" : "2014_2016_training_files/export_prevision_solar.csv",
+    "france" : "2014_2016_training_files/export_generacion_programada_pvp_francia.csv",
+    "portugal" : "2014_2016_training_files/export_generacion_programada_pvp_portugal.csv",
+    "morocco" : "2014_2016_training_files/export_generacion_programada_pvp_marruecos.csv"
+}

@@ -10,9 +10,9 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 class generate_df(object):
 	
-	def __init__(self, path_dict, main_name):
+	def __init__(self, path_dict, main_name, date_limit):
 		self.raw_df_list = { name : self.__import_files(path_df) for name, path_df in path_dict.items()}
-		self.df_dict = { name : self.__get_clean_data(df, name) for name, df in self.raw_df_list.items()}
+		self.df_dict = { name : self.__get_clean_data(df, name, date_limit) for name, df in self.raw_df_list.items()}
 		self.name_list = list(path_dict.keys())
 		self.main_name = main_name
 		self.completed_df = self.__return_merged_df()
@@ -21,7 +21,7 @@ class generate_df(object):
 		df = pd.read_csv(path, encoding='latin1', delimiter=';')
 		return df
 	
-	def __get_clean_data(self, df_original, name):
+	def __get_clean_data(self, df_original, name, date_limit):
 		weekday_dict = {
 			0:'Wd', 1:'Wd', 2:'Wd', 3:'Wd', 4:'Wd', 5:'F', 6:'F' 
 		}
@@ -41,7 +41,10 @@ class generate_df(object):
 		df['season'] = np.where(df['month'].isin(list(range(4,10))), 'summer', 'winter')
 		df['date_hour'] = df.apply(lambda x: datetime.datetime.combine(x['date'], x['time']), axis=1)
 		df.set_index('date_hour', inplace=True)
-		df = df[df.index < '2017']
+		if date_limit == '2016':
+			df = df[df.index < '2017']
+		elif date_limit == '2017':
+			df = df[df.index >= '2017']
 		clean_df = df[['date', 'year', 'month', 'season', 'day','weekday','time', 'hour', 'minute', 'value']]
 		clean_df = clean_df[~clean_df.index.duplicated()]
 		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
@@ -162,6 +165,8 @@ class train_model(object):
 		self.errors_df = errors_df
 		self.vocab_coef, self.sample_dense_vocab = self._get_vocabulary_dense_matrix()
 
+		self.pipeline.fit(self.df[self.features].values, self.df[self.output].values)
+
 
 	def plot_histogram_error(self, alpha):
 		fig, ax = plt.subplots(1,1, figsize=(10,7))
@@ -170,6 +175,9 @@ class train_model(object):
 
 	def return_largest_tf(self, date, nums):
 		print(self.sample_dense_vocab.loc[date].nlargest(nums))
+
+	def predict_2017_samples(self, x):
+		return self.pipeline.predict(x.values)
 
 
 class metamodel(object):

@@ -9,9 +9,9 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 class generate_df(object):
 	
-	def __init__(self, path_dict, main_name):
-		self.raw_df_list = { name : self.__import_files(path_df) for name, path_df in path_dict.items()}
-		self.df_dict = { name : self.__get_clean_data(df, name) for name, df in self.raw_df_list.items()}
+	def __init__(self, path_dict, main_name, date):
+		self.__raw_df_list = { name : self.__import_files(path_df) for name, path_df in path_dict.items()}
+		self.__df_dict = { name : self.__get_clean_data(df, name, date) for name, df in self.__raw_df_list.items()}
 		self.name_list = list(path_dict.keys())
 		self.main_name = main_name
 		self.completed_df = self.__return_merged_df()
@@ -20,7 +20,7 @@ class generate_df(object):
 		df = pd.read_csv(path, encoding='latin1', delimiter=';')
 		return df
 	
-	def __get_clean_data(self, df_original, name):
+	def __get_clean_data(self, df_original, name, date):
 		weekday_dict = {
 			0:'Wd', 1:'Wd', 2:'Wd', 3:'Wd', 4:'Wd', 5:'F', 6:'F' 
 		}
@@ -40,7 +40,10 @@ class generate_df(object):
 		df['season'] = np.where(df['month'].isin(list(range(4,10))), 'summer', 'winter')
 		df['date_hour'] = df.apply(lambda x: datetime.datetime.combine(x['date'], x['time']), axis=1)
 		df.set_index('date_hour', inplace=True)
-		df = df[df.index < '2017']
+		if date == '2016':
+			df = df[df.index < '2017']
+		elif date == '2017':
+			df = df[df.index >= '2016-12-31']
 		clean_df = df[['date', 'year', 'month', 'season', 'day','weekday','time', 'hour', 'minute', 'value']]
 		clean_df = clean_df[~clean_df.index.duplicated()]
 		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
@@ -53,13 +56,13 @@ class generate_df(object):
 		Return a merged df with all features, base_df refers to the name of the df
 		to use as base of the merged df
 		"""
-		return self.df_dict[self.main_name].join([self.df_dict[name][[name]] for name in self.name_list if name != self.main_name])
+		return self.__df_dict[self.main_name].join([self.__df_dict[name][[name]] for name in self.name_list if name != self.main_name])
 
 	def return_raw_df_dict(self):
-		return self.raw_df_list
+		return self.__raw_df_list
 
 	def return_df_dict(self):
-		return self.df_dict
+		return self.__df_dict
 
 	def return_completed_df(self):
 		"""
@@ -107,6 +110,7 @@ class train_model(object):
 	def __divide_features_output(self):
 		X = self.df.drop(labels=self.features_to_remove + [self.output], axis=1).values
 		Y = self.df[self.output].values
+		self.features_list = self.df.drop(labels=self.features_to_remove + [self.output], axis=1).columns.tolist()
 		return X, Y
 
 	def _get_train_test_cv_type(self):
@@ -141,7 +145,10 @@ class train_model(object):
 		for fold, (train_index, test_index) in enumerate(self.cv):
 			print('Acting on fold %i' %(fold+1))
 			pipeline.fit(self.x_train[train_index], self.y_train[train_index])
-			output_pred = pipeline.predict(self.x_train[test_index])
+			if hasattr(pipeline, 'predict'):
+				output_pred = pipeline.predict(self.x_train[test_index])
+			else:
+				raise ValueError('pipieline does not contain "predict" method') 
 			CV_mae.append(mean_absolute_error(self.y_train[test_index], output_pred))
 			CV_mse.append(mean_squared_error(self.y_train[test_index], output_pred))
 
@@ -151,11 +158,14 @@ class train_model(object):
 	def obtain_train_test_error(self, pipeline):
 		pipeline.fit(self.x_train, self.y_train)
 		
-		print('Train MAE: ' +str(mean_absolute_error(self.y_train, pipeline.predict(self.x_train))) +
-			  ', Train MSE: ' +str(mean_squared_error(self.y_train, pipeline.predict(self.x_train))))
+		if hasattr(pipeline, 'predict'):
+			print('Train MAE: ' +str(mean_absolute_error(self.y_train, pipeline.predict(self.x_train))) +
+				', Train MSE: ' +str(mean_squared_error(self.y_train, pipeline.predict(self.x_train))))
 
-		print('Test MAE: ' +str(mean_absolute_error(self.y_test, pipeline.predict(self.x_test))) +
-			  ', Test MSE: ' +str(mean_squared_error(self.y_test, pipeline.predict(self.x_test))))
+			print('Test MAE: ' +str(mean_absolute_error(self.y_test, pipeline.predict(self.x_test))) +	
+				', Test MSE: ' +str(mean_squared_error(self.y_test, pipeline.predict(self.x_test))))
+		else:
+			raise ValueError('pipieline does not contain "predict" method')
 
 		errors_df = pd.DataFrame({'y_true':self.y_test, 'y_pred':pipeline.predict(self.x_test)})
 		errors_df['error'] = errors_df['y_true'] - errors_df['y_pred']
@@ -164,11 +174,95 @@ class train_model(object):
 		self.errors_df = errors_df
 
 	def plot_histogram_error(self):
-		fig, ax = plt.subplots(1,1, figsize=(10,7))
-		self.errors_df.hist(column='error', bins=int(np.sqrt(len(self.errors_df))),
+
+		try:
+			fig, ax = plt.subplots(1,1, figsize=(10,7))
+			self.errors_df.hist(column='error', bins=int(np.sqrt(len(self.errors_df))),
 							ax=ax, normed=True);
+		except:
+			raise ValueError('pipeline has not been fitted.')
 
 	def plot_feature_importance(self):
-		fig, ax = plt.subplots(1,1, figsize=(10,15))
-		pd.DataFrame(self.pipeline.feature_importances_, index=self.df.drop(labels=self.features_to_remove
+		
+		try:
+			fig, ax = plt.subplots(1,1, figsize=(10,15))
+			pd.DataFrame(self.pipeline.feature_importances_, index=self.df.drop(labels=self.features_to_remove
 					+ [self.output], axis=1).columns.tolist()).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+		except:
+			raise ValueError('pipeline has not been fitted.')
+
+	def get_log_residuals(self):
+		
+		self.pipeline.fit(self.X, self.Y)
+		Y_log = np.log1p(self.Y)
+		Y_pred_log = np.log1p(self.pipeline.predict(self.X))
+		residuals = Y_log - Y_pred_log
+		residuals_df = pd.DataFrame({'residuals': residuals}, index=self.df.index)
+
+		return residuals_df
+
+class forecast_2017_samples(object):
+
+	def __init__(self, df, feature_list, output, fitted_model, ar_param, ar_order, ma_param, ma_order, std):
+		self.df = df
+		self.feature_list = feature_list
+		self.output = output
+		self.model = fitted_model
+		self.ar = ar_param
+		self.ma = ma_param
+		self.ar_order = ar_order
+		self.ma_order = ma_order
+		self.std = std
+		self.X, self.Y = self.__divide_features_output()
+
+	def __fill_arima(self, df):
+		for time in range(len(self.ar)):
+			df['zt-'+str(self.ar_order[time]) +'_ar'] = df['zt'].shift(self.ar_order[time]) * self.ar[time]
+
+		for time in range(len(self.ma)):
+			df['zt-'+str(self.ma_order[time]) + '_ma'] = df['zt'].shift(self.ma_order[time]) * self.ma[time]
+
+		return df
+
+	def __divide_features_output(self):
+		X = self.df[self.feature_list].values
+		Y = self.df[self.output].values
+		return X, Y
+
+	def get_2017_predictions_from_base_model(self):
+		self.y_pred = self.model.predict(self.X)
+		print('MAE: %.4f, MSE: %.4f' %(mean_absolute_error(self.Y, self.y_pred), mean_squared_error(self.Y, self.y_pred)))
+		df = pd.DataFrame({'y_true': self.Y, 'y_pred': self.y_pred}, index=self.df.index)
+		df['error'] = df['y_true'] - df['y_pred']
+		self.z_df = df
+
+		return self.z_df
+
+	def get_2017_predictions_arima_effect(self):
+		zt = (np.log1p(self.Y) - np.log1p(self.y_pred))
+		model_arima_df = pd.DataFrame({'f(x)':self.y_pred, 'zt': zt, 'S': self.Y}, index=self.df.index)
+		model_arima_df = self.__fill_arima(model_arima_df)
+		model_arima_df['zt_pred'] = model_arima_df.iloc[:,-(len(self.ar) + len(self.ma)):].sum(axis=1)
+		model_arima_df['S_pred'] = model_arima_df['f(x)'] * np.exp(model_arima_df['zt_pred'])
+
+		print('MAE: %.4f, MSE: %.4f' %(mean_absolute_error(model_arima_df['S'], model_arima_df['S_pred']), 
+			mean_squared_error(model_arima_df['S'], model_arima_df['S_pred'])))
+
+		self.model_arima_df_base = model_arima_df.copy(deep=True)
+
+		return model_arima_df
+
+	def get_2017_predictions_whit_noise(self):
+		noise = np.random.normal(loc=0, scale=self.std, size=(len(self.Y)))
+		self.model_arima_df_base['noise'] = noise
+		self.model_arima_df_base['S_pred_noise'] = self.model_arima_df_base['S_pred'] * \
+									np.exp(self.model_arima_df_base['noise'])
+
+		print('MAE: %.4f, MSE: %.4f' %(mean_absolute_error(self.model_arima_df_base['S'], self.model_arima_df_base['S_pred_noise']), 
+			mean_squared_error(self.model_arima_df_base['S'], self.model_arima_df_base['S_pred_noise'])))
+
+		return self.model_arima_df_base
+
+
+
+
