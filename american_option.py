@@ -73,18 +73,19 @@ class american_option(object):
 		fig, ax = plt.subplots(1,1, figsize=(20,8))
 		self.df_mc.iloc[:, :int(self.I/100)].plot(alpha=0.2, legend=False, ax=ax)
 		self.df_mc[['S_true', 'S_pred']].plot(lw=2.5, ax=ax, color=('red','blue'))
-		self.df_mc[['mean']].plot(lw=2.5, color='black', linestyle='--', ax=ax)
 
 	def compute_option_value (self, K, pol_degree):
 		#Compute the option value for a given strike (electric valuation) or a list of strikes
 		S = self.df_mc.iloc[:,:self.I].values
-		if type(K) == int:
+		if isinstance(K, int) or isinstance(K, float):
 			return self.__compute_mcs_amer_option(S,K,pol_degree)
-		else:
+		elif isinstance(K, np.ndarray):
 			C_list = list()
 			for k in K:
 				C_list.append(self.__compute_mcs_amer_option(S,k,pol_degree))
 			return C_list
+		else:
+			raise ValueError('K must be a number or an array of numbers')
 
 	def plot_delta_option(self, K_list, C_list):
 		#Plot delta of the option 

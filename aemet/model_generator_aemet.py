@@ -45,13 +45,13 @@ class generate_df(object):
 			df = df[df.index < '2017']
 		elif date_limit == '2017':
 			df = df[df.index >= '2017']
+		else:
+			pass
 		clean_df = df[['date', 'year', 'month', 'season', 'day','weekday','time', 'hour', 'minute', 'value']]
 		clean_df = clean_df[~clean_df.index.duplicated()]
 		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
 		clean_df = clean_df.rename(columns={'value':name})
 		clean_df_freq = clean_df.asfreq('H')
-		#if name in ['france', 'morocco', 'portugal']:
-		#	clean_df_freq[name] = np.where(clean_df_freq[name].isnull(), 0, clean_df_freq[name])
 
 		return clean_df_freq
 

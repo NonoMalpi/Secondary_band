@@ -44,6 +44,8 @@ class generate_df(object):
 			df = df[df.index < '2017']
 		elif date == '2017':
 			df = df[df.index >= '2016-12-31']
+		else:
+			pass
 		clean_df = df[['date', 'year', 'month', 'season', 'day','weekday','time', 'hour', 'minute', 'value']]
 		clean_df = clean_df[~clean_df.index.duplicated()]
 		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
