@@ -203,6 +203,79 @@ class train_model(object):
 
 		return residuals_df
 
+class metamodel(object):
+	def __init__(self, features, pipeline, n_folds, num_cv, cv_type, metric):
+		self.features = features
+		self.pipeline = pipeline
+		self.n_folds = n_folds
+		self.num_cv = num_cv
+		self.cv_type = cv_type
+		self.metric = metric
+
+	def get_oos_cv_predictions(self, x_train, y_train, index_col):
+		"""
+		Method that generates the out-of-sample cv predictions and return model performance
+		"""
+
+		#Obtain features and output
+		X = x_train[self.features].values
+		index = x_train[index_col].values
+		oos_predictions = np.zeros(len(index))
+
+		# Perform #num_cv CV with different random seed to average predictions and reduce variance
+		for random_number in range(self.num_cv):
+
+			if hasattr(self.pipeline, 'predict_proba'):
+				cv = StratifiedKFold(n_splits=self.n_folds, random_state= random_number, shuffle=True)
+				cv_list = cv.split(X, y_train)
+			else:
+				if self.cv_type == 'group':
+					gkf = GroupKFold(n_splits=self.n_folds)
+					groups_for_cv = x_train[index_col].dt.date
+					cv_list = list(gkf.split(x_train, y_train, groups_for_cv))
+				else:
+					cv = KFold(n_splits=self.n_folds, random_state= random_number, shuffle=True)
+					cv_list = cv.split(X, y_train)
+
+			print('CV number: ', random_number+1)
+
+			#Check whether there are several error metrics
+			if isinstance(self.metric, dict):
+				CV_performance = { name : list() for name in self.metric.keys()}
+			else:
+				CV_performance = list()
+
+			for fold, (train_index, test_index) in enumerate(cv_list):
+				
+				print('Acting on fold %i of' %(fold+1), random_number+1)
+
+				self.pipeline.fit(X[train_index], y_train[train_index])
+				
+				if hasattr(self.pipeline, 'predict_proba'):
+					y_pred = self.pipeline.predict_proba(X[test_index])[:,1]
+				else:
+					y_pred = self.pipeline.predict(X[test_index])
+
+				if isinstance(self.metric, dict):
+					for name, error_function in self.metric.items():
+						CV_performance[name].append(error_function(y_train[test_index], y_pred))
+				else:
+					CV_performance.append(self.metric(y_train[test_index], y_pred))
+				
+				#Agregate prediction from each CV iteration
+				oos_predictions[test_index] += y_pred
+
+			if isinstance(CV_performance, dict):
+				for name, val in CV_performance.items():
+					print( str(name) + ' on %d CV: %0.4f +- %0.4f' %(random_number+1, np.mean(val), 2*np.std(val)))
+			else:
+				print('Model performance on %d CV : %0.4f +- %0.4f' %(random_number+1, np.mean(CV_performance), 2*np.std(CV_performance)))
+
+		#Average each prediction
+		oos_predictions = oos_predictions / self.num_cv
+
+		return index, oos_predictions
+
 class forecast_2017_samples(object):
 
 	def __init__(self, df, feature_list, output, fitted_model, ar_param, ar_order, ma_param, ma_order, std):
