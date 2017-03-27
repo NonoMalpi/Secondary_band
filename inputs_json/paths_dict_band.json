@@ -13,6 +13,8 @@
     "programed_demand" : "2014_2016_training_files/export_demanda_programada.csv",
     "forecasted_wind" : "2014_2016_training_files/export_prevision_eolica.csv",
     "forecasted_solar" : "2014_2016_training_files/export_prevision_solar.csv",
+    "solar": "2014_2016_training_files/export_generacion_programada_pvp_solar_fotovoltaica.csv",
+    "solar_termica": "2014_2016_training_files/export_generacion_programada_pvp_solar_termica.csv",
     "france" : "2014_2016_training_files/export_generacion_programada_pvp_francia.csv",
     "portugal" : "2014_2016_training_files/export_generacion_programada_pvp_portugal.csv",
     "morocco" : "2014_2016_training_files/export_generacion_programada_pvp_marruecos.csv"

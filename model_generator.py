@@ -100,19 +100,18 @@ class generate_df(object):
 
 class train_model(object):
 
-	def __init__(self, df, output, features_to_remove, n_folds, cv_type='normal'):
+	def __init__(self, df, output, features_list, n_folds, cv_type='normal'):
 		self.df = df
 		self.output = output
-		self.features_to_remove = features_to_remove
+		self.features_list = features_list
 		self.n_folds = n_folds
 		self.X, self.Y = self.__divide_features_output()
 		self.cv_type = cv_type
 		self.x_train, self.x_test, self.y_train, self.y_test = self._get_train_test_cv_type()
 
 	def __divide_features_output(self):
-		X = self.df.drop(labels=self.features_to_remove + [self.output], axis=1).values
+		X = self.df[self.features_list].values
 		Y = self.df[self.output].values
-		self.features_list = self.df.drop(labels=self.features_to_remove + [self.output], axis=1).columns.tolist()
 		return X, Y
 
 	def _get_train_test_cv_type(self):
@@ -184,12 +183,23 @@ class train_model(object):
 		except:
 			raise ValueError('pipeline has not been fitted.')
 
-	def plot_feature_importance(self):
+	def get_feature_importance(self):
 		
 		try:
-			fig, ax = plt.subplots(1,1, figsize=(10,15))
-			pd.DataFrame(self.pipeline.feature_importances_, index=self.df.drop(labels=self.features_to_remove
-					+ [self.output], axis=1).columns.tolist()).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+			if hasattr(self.pipeline, 'steps'):
+				if hasattr(self.pipeline.steps[-1][-1], 'feature_importances_'):
+					fig, ax = plt.subplots(1,1, figsize=(10,15))
+					pd.DataFrame(self.pipeline.steps[-1][-1].feature_importances_, index=self.features_list
+						).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+				elif hasattr(self.pipeline.steps[-1][-1], 'coef_'):
+					df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
+						self.pipeline.steps[-1][-1].coef_.tolist(), index=['intercept'] + 
+						self.features_list)
+					print(df)
+			else:
+				fig, ax = plt.subplots(1,1, figsize=(10,15))
+				pd.DataFrame(self.pipeline.feature_importances_, index=self.features_list
+					).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
 		except:
 			raise ValueError('pipeline has not been fitted.')
 
@@ -202,6 +212,7 @@ class train_model(object):
 		residuals_df = pd.DataFrame({'residuals': residuals}, index=self.df.index)
 
 		return residuals_df
+
 
 class metamodel(object):
 	def __init__(self, features, pipeline, n_folds, num_cv, cv_type, metric):
@@ -327,7 +338,7 @@ class forecast_2017_samples(object):
 
 		return model_arima_df
 
-	def get_2017_predictions_whit_noise(self):
+	def get_2017_predictions_with_noise(self):
 		noise = np.random.normal(loc=0, scale=self.std, size=(len(self.Y)))
 		self.model_arima_df_base['noise'] = noise
 		self.model_arima_df_base['S_pred_noise'] = self.model_arima_df_base['S_pred'] * \
