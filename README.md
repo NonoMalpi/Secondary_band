@@ -11,7 +11,7 @@ apporach [1] is the framework used to approximate the value of the american opti
 
 #### Diagram of the ML model:
 
-![machine learning pipeline - page 1](https://cloud.githubusercontent.com/assets/23661636/24581039/fef402d8-1713-11e7-9d99-a2853619bdc2.png)
+![machine learning pipeline - page 1](https://cloud.githubusercontent.com/assets/23661636/24581055/52b2046a-1714-11e7-843a-ac559f3b1361.png)
 
 ---
 References:
