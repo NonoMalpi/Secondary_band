@@ -2,7 +2,7 @@
 
 This project comprises part of my Master's Thesis. 
 
-The aim of the Master's Thesis is to compute the value of an american option on the Spanish secondary band market for 
+The aim of the project is to compute the value of an american option on the Spanish secondary band market for 
 the following day. For this purpose, a Machine Learning (ML) model has been developed to forecast the secondary band price. The pipeline includes 
 several ML algorithms, where the input data for the models are different Spanish electricity system variables. 
 
