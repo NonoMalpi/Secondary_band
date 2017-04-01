@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime
+from itertools import compress
 
 from sklearn.model_selection import KFold, GroupKFold, train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
@@ -192,10 +193,17 @@ class train_model(object):
 					pd.DataFrame(self.pipeline.steps[-1][-1].feature_importances_, index=self.features_list
 						).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
 				elif hasattr(self.pipeline.steps[-1][-1], 'coef_'):
-					df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
-						self.pipeline.steps[-1][-1].coef_.tolist(), index=['intercept'] + 
-						self.features_list)
-					print(df)
+					if hasattr(self.pipeline.steps[-2][-1], 'get_support'):
+						select_feat = self.pipeline.steps[-2][-1].get_support()
+						df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
+							self.pipeline.steps[-1][-1].coef_.tolist(), 
+							index=['intercept'] + list(compress(self.features_list, select_feat)))
+						print(df)
+					else:
+						df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
+							self.pipeline.steps[-1][-1].coef_.tolist(), index=['intercept'] + 
+							self.features_list)
+						print(df)
 			else:
 				fig, ax = plt.subplots(1,1, figsize=(10,15))
 				pd.DataFrame(self.pipeline.feature_importances_, index=self.features_list
