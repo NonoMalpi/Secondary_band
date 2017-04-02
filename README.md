@@ -7,7 +7,7 @@ the following day. For this purpose, a Machine Learning (ML) model has been deve
 several ML algorithms, where the input data for the models are different Spanish electricity system variables. 
 
 The output obtained from the model is used as a baseline to evaluate an american option. The Last-Squares Monte Carlo 
-apporach [1] is the framework used to approximate the value of the american option via simulation.
+approach [1] is the framework used to approximate the value of the american option via simulation.
 
 #### Diagram of the ML model:
 
