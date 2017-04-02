@@ -87,10 +87,10 @@ class american_option(object):
 		else:
 			raise ValueError('K must be a number or an array of numbers')
 
-	def plot_delta_option(self, K_list, C_list):
+	def plot_option_value_vs_strike(self, K_list, C_list):
 		#Plot delta of the option 
 		fig, axis = plt.subplots(1,1, figsize=(10,7))
 		axis.plot(K_list, C_list)
-		axis.set_title('Delta of American option')
+		axis.set_title('Option value against Strike')
 		axis.set_xlabel('Strike price $K$')
 		axis.set_ylabel('Option value $€/MW$')
