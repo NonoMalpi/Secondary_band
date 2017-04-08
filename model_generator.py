@@ -41,12 +41,13 @@ class generate_df(object):
 		df['season'] = np.where(df['month'].isin(list(range(4,10))), 'summer', 'winter')
 		df['date_hour'] = df.apply(lambda x: datetime.datetime.combine(x['date'], x['time']), axis=1)
 		df.set_index('date_hour', inplace=True)
-		if date == '2016':
-			df = df[df.index < '2017']
-		elif date == '2017':
-			df = df[df.index >= '2016-12-31']
-		else:
-			pass
+		df = df[df.index < date]
+		#if date == '2016':
+		#	df = df[df.index < '2017']
+		#elif date == '2017':
+		#	df = df[df.index >= '2016-12-31']
+		#else:
+		#	pass
 		clean_df = df[['date', 'year', 'month', 'season', 'day','weekday','time', 'hour', 'minute', 'value']]
 		clean_df = clean_df[~clean_df.index.duplicated()]
 		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
@@ -108,7 +109,11 @@ class train_model(object):
 		self.n_folds = n_folds
 		self.X, self.Y = self.__divide_features_output()
 		self.cv_type = cv_type
-		self.x_train, self.x_test, self.y_train, self.y_test = self._get_train_test_cv_type()
+		if self.cv_type == 'normal' or self.cv_type == 'group':
+			self.x_train, self.x_test, self.y_train, self.y_test = self._get_train_test_cv_type()
+		else:
+			raise ValueError('Check cv type input')
+		
 
 	def __divide_features_output(self):
 		X = self.df[self.features_list].values
@@ -130,7 +135,7 @@ class train_model(object):
 			groups_for_cv = self.df.iloc[train_idx].index.date
 
 			self.cv = list(gkf.split(x_train, y_train, groups_for_cv))
-		else:
+		elif self.cv_type == 'normal':
 			kf = KFold(n_splits=self.n_folds, random_state=0, shuffle=True)
 
 			x_train, x_test, y_train, y_test = train_test_split(self.X, self.Y, train_size=0.8, test_size=0.2, random_state=0)
@@ -357,6 +362,72 @@ class forecast_2017_samples(object):
 
 		return self.model_arima_df_base
 
+class timeseries_model(object):
 
+	def __init__(self, df, feature_list, output, start_date, end_date, train_length, pipeline, rolling=False):
+		self.df = self.__get_df(df, start_date)
+		self.features_list = features_list
+		self.output = output
+		self.date_index = self.__get_date_index(start_date, end_date)
+		self.length = train_length
+		self.pipeline = pipeline
+		self.rolling_bool = rolling
+		self.cv = self.__create_cv_indexes()
+		self.X, self.Y = self.__divide_features_output()
 
+	def __get_df(self, df, start_date):
+		df = df[df.index >= start_date]
+		return df
 
+	def __get_date_index(self, start_date, end_date):
+		date_index = pd.date_range(start=start_date, end=end_date, freq='D')
+		return date_index
+
+	def __create_cv_indexes(self):
+		cv_list = list()
+		
+		if self.rolling_bool:
+			for i in range(len(self.date_index) - self.length):
+				train_period = self.date_index.date[i:self.length+i]
+				test_period = self.date_index.date[self.length+i]
+				train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
+				test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
+				train_test_list = [train_index, test_index]
+				cv_list.append(train_test_list)
+		else:
+			for i in range(len(self.date_index) - self.length):
+				train_period = self.date_index.date[:self.length+i]
+				test_period = self.date_index.date[self.length+i]
+				train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
+				test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
+				train_test_list = [train_index, test_index]
+				cv_list.append(train_test_list)
+		
+		return cv_list
+
+	def __divide_features_output(self):
+		X = self.df[self.feature_list].values
+		Y = self.df[self.output].values
+		return X, Y
+
+	def obtain_cv_scores(self):
+		CV_mae = list()
+		CV_mse = list()
+		output_list = list()
+
+		for fold, (train_index, test_index) in enumerate(self.cv):
+			if (fold+1 % 10) == 0:
+				print('Acting on fold %i' %(fold+1))
+			self.pipeline.fit(self.X[train_index], self.Y[train_index])
+			output_pred = self.pipeline.predict(self.X[test_index])
+			CV_mae.append(mean_absolute_error(self.Y[test_index], output_pred))
+			CV_mse.append(mean_squared_error(self.Y[test_index], output_pred))
+			output_list.append(output_pred.tolist())
+
+		print('Mean absolute error: %0.4f +- %0.4f' %(np.mean(CV_mae), 2*np.std(CV_mae)))
+		print('Mean squared error: %0.4f +- %0.4f' %(np.mean(CV_mse), 2*np.std(CV_mse)))
+
+		self.result_df = pd.DataFrame({'y_true':self.Y[self.length*24:], 'y_pred':output_list},
+								index=self.df.iloc[self.length*24:].index)
+
+		return self.result_df
