@@ -41,12 +41,6 @@ class generate_df(object):
 		df['date_hour'] = df.apply(lambda x: datetime.datetime.combine(x['date'], x['time']), axis=1)
 		df.set_index('date_hour', inplace=True)
 		df = df[df.index < date]
-		#if date == '2016':
-		#	df = df[df.index < '2017']
-		#elif date == '2017':
-		#	df = df[df.index >= '2016-12-31']
-		#else:
-		#	pass
 		clean_df = df[['date', 'year', 'month', 'season', 'day','weekday','time', 'hour', 'minute', 'value']]
 		clean_df = clean_df[~clean_df.index.duplicated()]
 		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
@@ -203,68 +197,3 @@ class timeseries_model(object):
 					).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
 		except:
 			raise ValueError('pipeline has not been fitted.')
-
-
-
-#ADD A DESIRED DATE TO PERFORM PREDICT JUST ON THIS DATE
-class forecast_2017_samples(object):
-
-	def __init__(self, df, feature_list, output, fitted_model, ar_param, ar_order, ma_param, ma_order, std):
-		self.df = df
-		self.feature_list = feature_list
-		self.output = output
-		self.model = fitted_model
-		self.ar = ar_param
-		self.ma = ma_param
-		self.ar_order = ar_order
-		self.ma_order = ma_order
-		self.std = std
-		self.X, self.Y = self.__divide_features_output()
-
-	def __fill_arima(self, df):
-		for time in range(len(self.ar)):
-			df['zt-'+str(self.ar_order[time]) +'_ar'] = df['zt'].shift(self.ar_order[time]) * self.ar[time]
-
-		for time in range(len(self.ma)):
-			df['zt-'+str(self.ma_order[time]) + '_ma'] = df['zt'].shift(self.ma_order[time]) * self.ma[time]
-
-		return df
-
-	def __divide_features_output(self):
-		X = self.df[self.feature_list].values
-		Y = self.df[self.output].values
-		return X, Y
-
-	def get_2017_predictions_from_base_model(self):
-		self.y_pred = self.model.predict(self.X)
-		print('MAE: %.4f, MSE: %.4f' %(mean_absolute_error(self.Y, self.y_pred), mean_squared_error(self.Y, self.y_pred)))
-		df = pd.DataFrame({'y_true': self.Y, 'y_pred': self.y_pred}, index=self.df.index)
-		df['error'] = df['y_true'] - df['y_pred']
-		self.z_df = df
-
-		return self.z_df
-
-	def get_2017_predictions_arima_effect(self):
-		zt = (np.log1p(self.Y) - np.log1p(self.y_pred))
-		model_arima_df = pd.DataFrame({'f(x)':self.y_pred, 'zt': zt, 'S': self.Y}, index=self.df.index)
-		model_arima_df = self.__fill_arima(model_arima_df)
-		model_arima_df['zt_pred'] = model_arima_df.iloc[:,-(len(self.ar) + len(self.ma)):].sum(axis=1)
-		model_arima_df['S_pred'] = model_arima_df['f(x)'] * np.exp(model_arima_df['zt_pred'])
-
-		print('MAE: %.4f, MSE: %.4f' %(mean_absolute_error(model_arima_df['S'], model_arima_df['S_pred']), 
-			mean_squared_error(model_arima_df['S'], model_arima_df['S_pred'])))
-
-		self.model_arima_df_base = model_arima_df.copy(deep=True)
-
-		return model_arima_df
-
-	def get_2017_predictions_with_noise(self):
-		noise = np.random.normal(loc=0, scale=self.std, size=(len(self.Y)))
-		self.model_arima_df_base['noise'] = noise
-		self.model_arima_df_base['S_pred_noise'] = self.model_arima_df_base['S_pred'] * \
-									np.exp(self.model_arima_df_base['noise'])
-
-		print('MAE: %.4f, MSE: %.4f' %(mean_absolute_error(self.model_arima_df_base['S'], self.model_arima_df_base['S_pred_noise']), 
-			mean_squared_error(self.model_arima_df_base['S'], self.model_arima_df_base['S_pred_noise'])))
-
-		return self.model_arima_df_base

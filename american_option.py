@@ -3,11 +3,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 class american_option(object):
-	def __init__(self, df, M, I, std):
+	def __init__(self, df, M, I, std_df):
 		self.df = df
 		self.M = M
 		self.I = I
-		self.std = std
+		self.std_df = std_df
 
 	def __generate_sn(self, M,I,std):
 		"""
@@ -59,8 +59,11 @@ class american_option(object):
 		#Compute the random paths for the desired date
 		self.__index = np.flatnonzero(self.df.index == date)[0]
 		base_mc = self.df.iloc[self.__index:self.__index+self.M]['S_pred'].values
-		#Random paths
-		estimations_mc = base_mc.reshape(-1,1) * np.exp(self.__generate_sn(self.M, self.I, self.std))
+		###Random paths
+		#Obtain the std of the previous day
+		self.__index_std = np.flatnonzero(self.std_df.index == date)[0] - 1
+		std = self.std_df.iloc[self.__index_std]['std']
+		estimations_mc = base_mc.reshape(-1,1) * np.exp(self.__generate_sn(self.M, self.I, std))
 		estimations_mc = pd.DataFrame(data=estimations_mc, index=self.df.iloc[self.__index:self.__index+self.M].index)
 		estimations_mc['mean'] = estimations_mc.mean(axis=1)
 		estimations_mc['S_pred'] = base_mc
