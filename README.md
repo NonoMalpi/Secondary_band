@@ -11,7 +11,7 @@ approach [1] is the framework used to approximate the value of the american opti
 
 #### Diagram of the ML model:
 
-![machine_learning_pipeline](https://cloud.githubusercontent.com/assets/23661636/24831773/04d8b814-1ca1-11e7-8019-fed1c46c8edd.png)
+![machine_learning_pipeline_no_arima](https://cloud.githubusercontent.com/assets/23661636/24836767/f6cca454-1d24-11e7-9da5-5979c10e8087.png)
 
 ---
 References:
