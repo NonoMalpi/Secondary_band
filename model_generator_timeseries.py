@@ -96,13 +96,14 @@ class generate_df(object):
 
 class timeseries_model(object):
 
-	def __init__(self, df, features_list, output, start_date, end_date, train_length, pipeline, rolling=False):
+	def __init__(self, df, features_list, output, start_date, end_date, train_length, pipeline, first_date_to_predict='2017-01-01',rolling=False):
 		self.df = self.__get_df(df, start_date)
 		self.features_list = features_list
 		self.output = output
 		self.date_index = self.__get_date_index(start_date, end_date)
 		self.length = train_length
 		self.pipeline = pipeline
+		self.date_to_predict = first_date_to_predict
 		self.rolling_bool = rolling
 		self.cv = self.__create_cv_indexes()
 		self.X, self.Y = self.__divide_features_output()
@@ -117,9 +118,9 @@ class timeseries_model(object):
 
 	def __create_cv_indexes(self):
 		cv_list = list()
-		
+		first_date = np.flatnonzero(self.date_index == self.date_to_predict)[0] - self.length
 		if self.rolling_bool:
-			for i in range(len(self.date_index) - self.length):
+			for i in range(first_date, len(self.date_index) - self.length):
 				train_period = self.date_index.date[i:self.length+i]
 				test_period = self.date_index.date[self.length+i]
 				train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
@@ -127,7 +128,7 @@ class timeseries_model(object):
 				train_test_list = [train_index, test_index]
 				cv_list.append(train_test_list)
 		else:
-			for i in range(len(self.date_index) - self.length):
+			for i in range(first_date, len(self.date_index) - self.length):
 				train_period = self.date_index.date[:self.length+i]
 				test_period = self.date_index.date[self.length+i]
 				train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
@@ -161,9 +162,10 @@ class timeseries_model(object):
 		print('Mean absolute error: %0.4f +- %0.4f' %(np.mean(CV_mae), 2*np.std(CV_mae)))
 		print('Mean squared error: %0.4f +- %0.4f' %(np.mean(CV_mse), 2*np.std(CV_mse)))
 
+		first_date = np.flatnonzero(self.df.index >= self.date_to_predict)[0]
 
-		self.result_df = pd.DataFrame({'y_true':self.Y[self.length*24:], 'y_pred':output},
-								index=self.df.iloc[self.length*24:].index)
+		self.result_df = pd.DataFrame({'y_true':self.Y[first_date:], 'y_pred':output},
+								index=self.df.iloc[first_date:].index)
 		self.result_df['error'] = self.result_df['y_true'] - self.result_df['y_pred']
 
 	def plot_histogram_error(self):
