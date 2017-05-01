@@ -16,7 +16,7 @@ class american_option(object):
 		I: Number of paths to be simulated
 		std: Standard deviations of the desired normal random number 
 		"""
-		sn = np.random.normal(loc=0, scale=std, size=(M, I/2))
+		sn = np.random.normal(loc=0, scale=std, size=(M, I//2))
 		sn = np.concatenate((sn, -sn), axis=1)
 		return sn
 
@@ -74,7 +74,7 @@ class american_option(object):
 	def plot_montecarlo(self):
 		#Plot a Monte Carlo sample of the paths generated
 		fig, ax = plt.subplots(1,1, figsize=(20,8))
-		self.df_mc.iloc[:, :int(self.I/100)].plot(alpha=0.2, legend=False, ax=ax)
+		self.df_mc.iloc[:, :int(self.I/100)].plot(alpha=0.1, legend=False, ax=ax, color='grey')
 		self.df_mc[['S_true', 'S_pred']].plot(lw=2.5, ax=ax, color=('red','blue'))
 
 	def compute_option_value (self, K, pol_degree):

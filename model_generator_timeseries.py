@@ -162,6 +162,9 @@ class timeseries_model(object):
 		print('Mean absolute error: %0.4f +- %0.4f' %(np.mean(CV_mae), 2*np.std(CV_mae)))
 		print('Mean squared error: %0.4f +- %0.4f' %(np.mean(CV_mse), 2*np.std(CV_mse)))
 
+		self.CV_mae = CV_mae
+		self.CV_mse = CV_mse
+
 		first_date = np.flatnonzero(self.df.index >= self.date_to_predict)[0]
 
 		self.result_df = pd.DataFrame({'y_true':self.Y[first_date:], 'y_pred':output},
