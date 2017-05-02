@@ -146,12 +146,14 @@ class timeseries_model(object):
 	def obtain_cv_scores(self):
 		CV_mae = list()
 		CV_mse = list()
+		fitted_residuals_std = list()
 		output_list = list()
 
 		for fold, (train_index, test_index) in enumerate(self.cv):
 			if ((fold+1) % 10) == 0:
 				print('Acting on fold %i' %(fold+1))
 			self.pipeline.fit(self.X[train_index], self.Y[train_index])
+			fitted_residuals_std.append(np.std(np.log1p(self.Y[train_index]) - np.log1p(self.pipeline.predict(self.X[train_index]))))
 			output_pred = self.pipeline.predict(self.X[test_index])
 			CV_mae.append(mean_absolute_error(self.Y[test_index], output_pred))
 			CV_mse.append(mean_squared_error(self.Y[test_index], output_pred))
@@ -170,6 +172,8 @@ class timeseries_model(object):
 		self.result_df = pd.DataFrame({'y_true':self.Y[first_date:], 'y_pred':output},
 								index=self.df.iloc[first_date:].index)
 		self.result_df['error'] = self.result_df['y_true'] - self.result_df['y_pred']
+
+		self.fitted_residuals_std = fitted_residuals_std
 
 	def plot_histogram_error(self):
 		fig, ax = plt.subplots(1,1, figsize=(10,7))

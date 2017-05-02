@@ -60,9 +60,9 @@ class american_option(object):
 		self.__index = np.flatnonzero(self.df.index == date)[0]
 		base_mc = self.df.iloc[self.__index:self.__index+self.M]['S_pred'].values
 		###Random paths
-		#Obtain the std of the previous day
-		self.__index_std = np.flatnonzero(self.std_df.index == date)[0] - 1
-		std = self.std_df.iloc[self.__index_std]['std']
+		#Obtain the std of the desired day
+		self.__index_std = np.flatnonzero(self.std_df.index == date)[0]
+		std = self.std_df.iloc[self.__index_std]['residuals_std']
 		estimations_mc = base_mc.reshape(-1,1) * np.exp(self.__generate_sn(self.M, self.I, std))
 		estimations_mc = pd.DataFrame(data=estimations_mc, index=self.df.iloc[self.__index:self.__index+self.M].index)
 		estimations_mc['mean'] = estimations_mc.mean(axis=1)
