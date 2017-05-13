@@ -71,11 +71,16 @@ class american_option(object):
 		self.df_mc = estimations_mc
 		return self.df_mc
 
-	def plot_montecarlo(self):
+	def plot_montecarlo(self, save_bool=False):
 		#Plot a Monte Carlo sample of the paths generated
-		fig, ax = plt.subplots(1,1, figsize=(20,8))
+		fig, ax = plt.subplots(1,1, figsize=(10,7))
 		self.df_mc.iloc[:, :int(self.I/100)].plot(alpha=0.1, legend=False, ax=ax, color='grey')
-		self.df_mc[['S_true', 'S_pred']].plot(lw=2.5, ax=ax, color=('red','blue'))
+		self.df_mc[['S_true', 'S_pred']].rename(columns={'S_true':'$S_{t}$', 
+				'S_pred':'$\widehat{S_{t}}$'}).plot(lw=2.5, ax=ax, color=('#50b847','#00133e'))
+		ax.set_xlabel('Hour', size=14)
+		ax.set_ylabel('$€/MW$', size=14)
+		if save_bool == True:
+			plt.savefig(str(self.df_mc.index[0])[:10] + '_montecarlo.pdf', bbox_inches='tight')
 
 	def compute_option_value (self, K, pol_degree):
 		#Compute the option value for a given strike (electric valuation) or a list of strikes
@@ -90,10 +95,12 @@ class american_option(object):
 		else:
 			raise ValueError('K must be a number or an array of numbers')
 
-	def plot_option_value_vs_strike(self, K_list, C_list):
-		#Plot delta of the option 
+	def plot_option_value_vs_strike(self, K_list, C_list, date, save_bool=False):
+		#Plot option value against strike of the option 
 		fig, axis = plt.subplots(1,1, figsize=(10,7))
-		axis.plot(K_list, C_list)
-		axis.set_title('Option value against Strike')
-		axis.set_xlabel('Strike price $K$')
-		axis.set_ylabel('Option value $€/MW$')
+		axis.plot(K_list, C_list, color='grey', lw=2.0)
+		#axis.set_title('Option value against Strike')
+		axis.set_xlabel('Strike price $K$', size=14)
+		axis.set_ylabel('Option value $€/MW$', size=14)
+		if save_bool == True:
+			plt.savefig(str(date) +'value_strike.pdf', bbox_inches='tight')
