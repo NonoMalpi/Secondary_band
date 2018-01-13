@@ -1,208 +1,331 @@
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
 import datetime
 from itertools import compress
+
+import numpy as np
+import pandas as pd
 
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 
 class generate_df(object):
-	
-	def __init__(self, path_dict, main_name, date):
-		self.__raw_df_list = { name : self.__import_files(path_df) for name, path_df in path_dict.items()}
-		self.__df_dict = { name : self.__get_clean_data(df, name, date) for name, df in self.__raw_df_list.items()}
-		self.name_list = list(path_dict.keys())
-		self.main_name = main_name
-		self.completed_df = self.__return_merged_df()
+    """Generate a `pandas.Dataframe` to fit the ML models.
+    This class allows to generate a DataFrame from several csv files; these
+    files contain the feature values of the Spanish electricity system. 
+    In addition, a feature engineering steps over the raw variables is inlcuded.
 
-	def __import_files(self, path):
-		df = pd.read_csv(path, encoding='latin1', delimiter=';')
-		return df
-	
-	def __get_clean_data(self, df_original, name, date):
-		weekday_dict = {
-			0:'Wd', 1:'Wd', 2:'Wd', 3:'Wd', 4:'Wd', 5:'F', 6:'F' 
-		}
+    Attributes
+    ----------
+    name_list: list
+        List containing the name of all features used.
 
-		df = df_original.copy(deep=True)
-		if name == 'spot':
-			df = df[df['geoid'] == 3]
-		df['date'] =  pd.to_datetime(df['datetime'].apply(lambda x: x[:10]), format='%Y-%m-%d')
-		df['year'] = df['date'].dt.year
-		df['time'] = pd.to_datetime(df['datetime'].apply(lambda x: x[:19])).dt.time
-		df['month'] = df['date'].dt.month
-		df['day'] = df['date'].dt.day
-		df['hour'] = df['datetime'].apply(lambda x: x[11:13]).astype(int)
-		df['minute'] = df['datetime'].apply(lambda x: x[14:16]).astype(int)
-		df['weekday'] = df['date'].dt.dayofweek
-		df.replace({'weekday':weekday_dict}, inplace=True)
-		df['season'] = np.where(df['month'].isin(list(range(4,10))), 'summer', 'winter')
-		df['date_hour'] = df.apply(lambda x: datetime.datetime.combine(x['date'], x['time']), axis=1)
-		df.set_index('date_hour', inplace=True)
-		df = df[df.index < date]
-		clean_df = df[['date', 'year', 'month', 'season', 'day','weekday','time', 'hour', 'minute', 'value']]
-		clean_df = clean_df[~clean_df.index.duplicated()]
-		clean_df['hour'] = np.where(clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak')
-		clean_df = clean_df.rename(columns={'value':name})
+    main_name: str
+        Name of the target variable for teh ML model.
 
-		return clean_df
+    completed_df: pandas.Dataframe
+        DataFrame with target variable, raw and time-dependent fetures. 
+    """
 
-	def __return_merged_df(self):
-		"""
-		Return a merged df with all features, base_df refers to the name of the df
-		to use as base of the merged df
-		"""
-		return self.__df_dict[self.main_name].join([self.__df_dict[name][[name]] for name in self.name_list if name != self.main_name])
+    def __init__(self, path_dict, main_name, date):
+        """
+        Parameters
+        ----------
+        path_dict: dict
+            Dictionary containing the name of the feature and the path.
 
-	def return_raw_df_dict(self):
-		return self.__raw_df_list
+        main_name: str
+            Name of the target variable for teh ML model.
 
-	def return_df_dict(self):
-		return self.__df_dict
+        date: str
+            The last date for which data is available.
+        """
+        # dict containing name feature and raw df
+        self.__raw_df_list = { 
+            name : self.__import_files(path_df) 
+            for name, path_df in path_dict.items()
+        }
 
-	def return_completed_df(self):
-		"""
-		Return the merged df with all raw features
-		"""
-		return self.completed_df
+        # dict containing clean df until the date passed 
+        self.__df_dict = { 
+            name : self.__get_clean_data(df, name, date) 
+            for name, df in self.__raw_df_list.items()
+        }
+        
+        self.name_list = list(path_dict.keys())
+        self.main_name = main_name
 
-	def return_df_feature_engineering(self, name_list_24):
-		""""
-		Return the completed_df with feature engineering:
-		Values from the past hour
-		Values for the same hour from past day
-		Moving averages
-		"""
-		df = self.completed_df[self.name_list + ['hour', 'weekday','season']]
-		
-		for feature in ['hour', 'weekday', 'season']:
-			df[pd.get_dummies(df[feature], drop_first=True).columns.tolist()] = pd.get_dummies(df[feature], drop_first=True)
+        # df with all target variable, time-dependent columns and raw features
+        self.completed_df = self.__return_merged_df()
 
-		custom_list_1_24 = [feature for feature in self.name_list if feature not in list(set([self.main_name] + name_list_24))]
-		
-		for feature in custom_list_1_24:
-			df[feature + '-1'] = df[feature].shift(periods=1)
-			df[feature + '-24'] = df[feature].shift(periods=24)
-			df[feature + '_mov_aver_24'] = pd.rolling_mean(df[feature], window=24)
+    def __import_files(self, path):
+        # parse csv file into pandas.DataFrame
+        df = pd.read_csv(path, encoding='latin1', delimiter=';')
+        return df
+    
+    def __get_clean_data(self, df_original, name, date):
+        """
+        Clean raw df and add time-dependent features from each timestamp.
 
-		for feature in name_list_24:
-			df[feature + '-24'] = df[feature].shift(periods=24)
+        Parameters
+        ----------
+        df_original: pandas.DataFrame
+            Raw DataFrame containig the feature value and the timestamp.
 
-		df.dropna(subset=[self.main_name], inplace=True)
+        name: str
+            Feature name to use.
 
-		return df
+        date: str
+            Last date to consider.
+
+        Returns
+        -------
+        clean_df: pandas.DataFrame
+            Dataframe containing the feature value together with the 
+            time-dependent features extracted.
+        """
+        # dict mapping weekday or fest
+        weekday_dict = {
+            0:'Wd', 1:'Wd', 2:'Wd', 3:'Wd', 4:'Wd', 5:'F', 6:'F' 
+        }
+
+        df = df_original.copy(deep=True)
+
+        # select Spain ('geoid' == 3) in spot file 
+        if name == 'spot':
+            df = df[df['geoid'] == 3]
+
+        # clean date and extract features from 'datetime' timestamp
+        # since the timestamp is UTC+1, it has to be parser without the +1
+        df.loc[:, 'date'] =  pd.to_datetime(
+            df['datetime'].apply(lambda x: x[:10]), format='%Y-%m-%d'
+        )
+
+        df.loc[:, 'year'] = df['date'].dt.year
+        
+        df.loc[:, 'time'] = pd.to_datetime(
+            df['datetime'].apply(lambda x: x[:19])
+        ).dt.time
+        
+        df.loc[:, 'month'] = df['date'].dt.month
+        
+        df.loc[:, 'day'] = df['date'].dt.day
+        
+        df.loc[:, 'hour'] = df['datetime'].apply(lambda x: x[11:13]).astype(int)
+        
+        df.loc[:, 'weekday'] = df['date'].dt.dayofweek
+        df.replace({'weekday':weekday_dict}, inplace=True)
+
+        df.loc[:, 'season'] = np.where(
+            df['month'].isin(list(range(4,10))), 'summer', 'winter'
+        )
+
+        # create index combaining date and time
+        df.loc[:, 'date_hour'] = df.apply(
+            lambda x: datetime.datetime.combine(x['date'], x['time']), axis=1
+        )
+        df.set_index('date_hour', inplace=True)
+        df = df[df.index < date]
+        
+        # keep just desired features
+        clean_df = df[[
+            'date', 'year', 'month', 
+            'season', 'day','weekday',
+            'time', 'hour', 'value'
+        ]]
+        #  remove duplicated hours (when the time is delayed one hour)
+        clean_df = clean_df[~clean_df.index.duplicated()]
+        
+        # classify hour according to peak demand
+        clean_df.loc[:, 'hour'] = np.where(
+            clean_df['hour'].isin(np.arange(9,23)), 'Peak', 'off_peak'
+        )
+
+        clean_df = clean_df.rename(columns={'value':name})
+
+        return clean_df
+
+    def __return_merged_df(self):
+        """
+        Return a merged df from the target df (output variable 
+        and time-depend features) joining the raw features columns
+        """
+        return self.__df_dict[self.main_name].join(
+            [self.__df_dict[name][[name]] for name in self.name_list 
+            if name != self.main_name]
+        )
+
+    def return_raw_df_dict(self):
+        return self.__raw_df_list
+
+    def return_df_dict(self):
+        return self.__df_dict
+
+    def return_completed_df(self):
+        """
+        Return the merged df with all raw features
+        """
+        return self.completed_df
+
+    def return_df_feature_engineering(self, name_list_24):
+        """
+        Generate a DataFrame containing feature engineered from raw variables.
+        The feature engineering contains:
+            - One hot encoding for the hour, weekday and season.
+            - Values from the last hour, when available.
+            - Values from the last day at the same hour.
+            - Moving average of the last 24 hours values.
+
+        Parameters
+        ----------
+        name_list_24: list
+            List containing the name of the variables for which the values of 
+            the last hour or the moving average cannot be performed.
+
+        Returns
+        -------
+        df: pandas.Dataframe
+            DataFrame ready to train the model (raw variables, 
+            feature engineering and target output)
+
+        """
+        df = self.completed_df[self.name_list + ['hour', 'weekday','season']]
+        
+        # one hot encoding of hour, weekday and season
+        for feature in ['hour', 'weekday', 'season']:
+            df[
+                pd.get_dummies(df[feature], drop_first=True).columns.tolist()
+            ] = pd.get_dummies(df[feature], drop_first=True)
+
+        # create a list with teh features to apply all feature engineering steps
+        custom_list_1_24 = [
+            feature for feature in self.name_list 
+            if feature not in list(set([self.main_name] + name_list_24))
+        ]
+        # apply transformations
+        for feature in custom_list_1_24:
+            df.loc[:, feature + '-1'] = df[feature].shift(periods=1)
+            df.loc[:, feature + '-24'] = df[feature].shift(periods=24)
+            df.loc[:, feature + '_mov_aver_24'] = pd.rolling_mean(
+                df[feature], window=24
+            )
+        # apply only possible transformation for features in name_list_24
+        for feature in name_list_24:
+            df.loc[:, feature + '-24'] = df[feature].shift(periods=24)
+
+        # remove rows with NaN in target output
+        df.dropna(subset=[self.main_name], inplace=True)
+
+        return df
 
 
 class timeseries_model(object):
 
-	def __init__(self, df, features_list, output, start_date, end_date, train_length, pipeline, first_date_to_predict='2017-01-01',rolling=False):
-		self.df = self.__get_df(df, start_date)
-		self.features_list = features_list
-		self.output = output
-		self.date_index = self.__get_date_index(start_date, end_date)
-		self.length = train_length
-		self.pipeline = pipeline
-		self.date_to_predict = first_date_to_predict
-		self.rolling_bool = rolling
-		self.cv = self.__create_cv_indexes()
-		self.X, self.Y = self.__divide_features_output()
+    def __init__(self, df, features_list, output, start_date, end_date, train_length, pipeline, first_date_to_predict='2017-01-01',rolling=False):
+        self.df = self.__get_df(df, start_date)
+        self.features_list = features_list
+        self.output = output
+        self.date_index = self.__get_date_index(start_date, end_date)
+        self.length = train_length
+        self.pipeline = pipeline
+        self.date_to_predict = first_date_to_predict
+        self.rolling_bool = rolling
+        self.cv = self.__create_cv_indexes()
+        self.X, self.Y = self.__divide_features_output()
 
-	def __get_df(self, df, start_date):
-		df = df[df.index >= start_date]
-		return df
+    def __get_df(self, df, start_date):
+        df = df[df.index >= start_date]
+        return df
 
-	def __get_date_index(self, start_date, end_date):
-		date_index = pd.date_range(start=start_date, end=end_date, freq='D')
-		return date_index
+    def __get_date_index(self, start_date, end_date):
+        date_index = pd.date_range(start=start_date, end=end_date, freq='D')
+        return date_index
 
-	def __create_cv_indexes(self):
-		cv_list = list()
-		first_date = np.flatnonzero(self.date_index == self.date_to_predict)[0] - self.length
-		if self.rolling_bool:
-			for i in range(first_date, len(self.date_index) - self.length):
-				train_period = self.date_index.date[i:self.length+i]
-				test_period = self.date_index.date[self.length+i]
-				train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
-				test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
-				train_test_list = [train_index, test_index]
-				cv_list.append(train_test_list)
-		else:
-			for i in range(first_date, len(self.date_index) - self.length):
-				train_period = self.date_index.date[:self.length+i]
-				test_period = self.date_index.date[self.length+i]
-				train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
-				test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
-				train_test_list = [train_index, test_index]
-				cv_list.append(train_test_list)
-		
-		return cv_list
+    def __create_cv_indexes(self):
+        cv_list = list()
+        first_date = np.flatnonzero(self.date_index == self.date_to_predict)[0] - self.length
+        if self.rolling_bool:
+            for i in range(first_date, len(self.date_index) - self.length):
+                train_period = self.date_index.date[i:self.length+i]
+                test_period = self.date_index.date[self.length+i]
+                train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
+                test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
+                train_test_list = [train_index, test_index]
+                cv_list.append(train_test_list)
+        else:
+            for i in range(first_date, len(self.date_index) - self.length):
+                train_period = self.date_index.date[:self.length+i]
+                test_period = self.date_index.date[self.length+i]
+                train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
+                test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
+                train_test_list = [train_index, test_index]
+                cv_list.append(train_test_list)
+        
+        return cv_list
 
-	def __divide_features_output(self):
-		X = self.df[self.features_list].values
-		Y = self.df[self.output].values
-		return X, Y
+    def __divide_features_output(self):
+        X = self.df[self.features_list].values
+        Y = self.df[self.output].values
+        return X, Y
 
-	def obtain_cv_scores(self):
-		CV_mae = list()
-		CV_mse = list()
-		fitted_residuals_std = list()
-		output_list = list()
+    def obtain_cv_scores(self):
+        CV_mae = list()
+        CV_mse = list()
+        fitted_residuals_std = list()
+        output_list = list()
 
-		for fold, (train_index, test_index) in enumerate(self.cv):
-			if ((fold+1) % 10) == 0:
-				print('Acting on fold %i' %(fold+1))
-			self.pipeline.fit(self.X[train_index], self.Y[train_index])
-			fitted_residuals_std.append(np.std(np.log1p(self.Y[train_index]) - np.log1p(self.pipeline.predict(self.X[train_index]))))
-			output_pred = self.pipeline.predict(self.X[test_index])
-			CV_mae.append(mean_absolute_error(self.Y[test_index], output_pred))
-			CV_mse.append(mean_squared_error(self.Y[test_index], output_pred))
-			output_list.append(output_pred)
+        for fold, (train_index, test_index) in enumerate(self.cv):
+            if ((fold+1) % 10) == 0:
+                print('Acting on fold %i' %(fold+1))
+            self.pipeline.fit(self.X[train_index], self.Y[train_index])
+            fitted_residuals_std.append(np.std(np.log1p(self.Y[train_index]) - np.log1p(self.pipeline.predict(self.X[train_index]))))
+            output_pred = self.pipeline.predict(self.X[test_index])
+            CV_mae.append(mean_absolute_error(self.Y[test_index], output_pred))
+            CV_mse.append(mean_squared_error(self.Y[test_index], output_pred))
+            output_list.append(output_pred)
 
-		output = np.concatenate(output_list)
+        output = np.concatenate(output_list)
 
-		print('Mean absolute error: %0.4f +- %0.4f' %(np.mean(CV_mae), 2*np.std(CV_mae)))
-		print('Mean squared error: %0.4f +- %0.4f' %(np.mean(CV_mse), 2*np.std(CV_mse)))
+        print('Mean absolute error: %0.4f +- %0.4f' %(np.mean(CV_mae), 2*np.std(CV_mae)))
+        print('Mean squared error: %0.4f +- %0.4f' %(np.mean(CV_mse), 2*np.std(CV_mse)))
 
-		self.CV_mae = CV_mae
-		self.CV_mse = CV_mse
+        self.CV_mae = CV_mae
+        self.CV_mse = CV_mse
 
-		first_date = np.flatnonzero(self.df.index >= self.date_to_predict)[0]
+        first_date = np.flatnonzero(self.df.index >= self.date_to_predict)[0]
 
-		self.result_df = pd.DataFrame({'y_true':self.Y[first_date:], 'y_pred':output},
-								index=self.df.iloc[first_date:].index)
-		self.result_df['error'] = self.result_df['y_true'] - self.result_df['y_pred']
+        self.result_df = pd.DataFrame({'y_true':self.Y[first_date:], 'y_pred':output},
+                                index=self.df.iloc[first_date:].index)
+        self.result_df['error'] = self.result_df['y_true'] - self.result_df['y_pred']
 
-		self.fitted_residuals_std = fitted_residuals_std
+        self.fitted_residuals_std = fitted_residuals_std
 
-	def plot_histogram_error(self):
-		fig, ax = plt.subplots(1,1, figsize=(10,7))
-		self.result_df.hist(column='error', bins=int(np.sqrt(len(self.result_df))), ax=ax,
-							normed=True)
+    def plot_histogram_error(self):
+        fig, ax = plt.subplots(1,1, figsize=(10,7))
+        self.result_df.hist(column='error', bins=int(np.sqrt(len(self.result_df))), ax=ax,
+                            normed=True)
 
-	def get_feature_importance(self):
-		
-		try:
-			if hasattr(self.pipeline, 'steps'):
-				if hasattr(self.pipeline.steps[-1][-1], 'feature_importances_'):
-					fig, ax = plt.subplots(1,1, figsize=(10,20))
-					pd.DataFrame(self.pipeline.steps[-1][-1].feature_importances_, index=self.features_list
-						).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
-				elif hasattr(self.pipeline.steps[-1][-1], 'coef_'):
-					if hasattr(self.pipeline.steps[-2][-1], 'get_support'):
-						select_feat = self.pipeline.steps[-2][-1].get_support()
-						df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
-							self.pipeline.steps[-1][-1].coef_.tolist(), 
-							index=['intercept'] + list(compress(self.features_list, select_feat)))
-						print(df)
-					else:
-						df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
-							self.pipeline.steps[-1][-1].coef_.tolist(), index=['intercept'] + 
-							self.features_list)
-						print(df)
-			else:
-				fig, ax = plt.subplots(1,1, figsize=(10,20))
-				pd.DataFrame(self.pipeline.feature_importances_, index=self.features_list
-					).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
-		except:
-			raise ValueError('pipeline has not been fitted.')
+    def get_feature_importance(self):
+        
+        try:
+            if hasattr(self.pipeline, 'steps'):
+                if hasattr(self.pipeline.steps[-1][-1], 'feature_importances_'):
+                    fig, ax = plt.subplots(1,1, figsize=(10,20))
+                    pd.DataFrame(self.pipeline.steps[-1][-1].feature_importances_, index=self.features_list
+                        ).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+                elif hasattr(self.pipeline.steps[-1][-1], 'coef_'):
+                    if hasattr(self.pipeline.steps[-2][-1], 'get_support'):
+                        select_feat = self.pipeline.steps[-2][-1].get_support()
+                        df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
+                            self.pipeline.steps[-1][-1].coef_.tolist(), 
+                            index=['intercept'] + list(compress(self.features_list, select_feat)))
+                        print(df)
+                    else:
+                        df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
+                            self.pipeline.steps[-1][-1].coef_.tolist(), index=['intercept'] + 
+                            self.features_list)
+                        print(df)
+            else:
+                fig, ax = plt.subplots(1,1, figsize=(10,20))
+                pd.DataFrame(self.pipeline.feature_importances_, index=self.features_list
+                    ).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+        except:
+            raise ValueError('pipeline has not been fitted.')
