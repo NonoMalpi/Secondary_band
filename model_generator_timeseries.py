@@ -1,6 +1,7 @@
 import datetime
 from itertools import compress
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -218,8 +219,52 @@ class generate_df(object):
 
 
 class timeseries_model(object):
+    """Generate a ML model for timeseries that can be trained and tested with custom cv.
+    This class allows to instantiate a ML model, trained and tested it on a 
+    rolling basis cv, check the errors of the model and get the feature 
+    importance if available.
 
-    def __init__(self, df, features_list, output, start_date, end_date, train_length, pipeline, first_date_to_predict='2017-01-01',rolling=False):
+
+
+    """
+
+    def __init__(
+            self, df, features_list, output, start_date, end_date, 
+            train_length, pipeline, first_date_to_predict='2017-01-01',
+            rolling=False
+        ):
+        """
+        Parameters
+        ----------
+        df: pandas.Dataframe
+            Timeseries input df for the ML model.
+
+        features_list: list
+            List containing the name of the input features for X.
+
+        output: str
+            Name of the target variable Y for the ML model.
+
+        start_date: str, dateformat: '%Y-%m-%d'
+            Minimum date used to conform X.
+
+        end_date: str, dateformat: '%Y-%m-%d'
+            Maximum date used to conform X.
+
+        train_length: int
+            Number of days used to train the model if the X input is 
+            a rolling window.
+
+        pipeline: sklearn.pipeline.Pipeline
+            Pipeline of transform with final estimator.
+
+        first_date_to_predict: str, dateformat: '%Y-%m-%d', default: '2017-01-01'
+            Date after which the model will start yielding predictions.
+
+        rolling: bool, default: False.
+            This controls if the model is trained on a rolling window basis.
+        """
+
         self.df = self.__get_df(df, start_date)
         self.features_list = features_list
         self.output = output
@@ -228,36 +273,67 @@ class timeseries_model(object):
         self.pipeline = pipeline
         self.date_to_predict = first_date_to_predict
         self.rolling_bool = rolling
+
+        # create custom cv keeping indexes of train and test.
         self.cv = self.__create_cv_indexes()
+
+        # split df into X and Y.
         self.X, self.Y = self.__divide_features_output()
 
     def __get_df(self, df, start_date):
+        """
+        Filter the input df from the start date  
+        """
         df = df[df.index >= start_date]
         return df
 
     def __get_date_index(self, start_date, end_date):
+        """
+        Generate a DatetimeIndex object from start and end date on a daily basis.
+        """
         date_index = pd.date_range(start=start_date, end=end_date, freq='D')
         return date_index
 
     def __create_cv_indexes(self):
+        """
+        Create a custom cv depending on if the training method is on a 
+        rolling basis.
+
+        Returns
+        -------
+        cv: list
+            Sequential list containing a list of the numerical indexes 
+            of the train and test set.
+        """
         cv_list = list()
-        first_date = np.flatnonzero(self.date_index == self.date_to_predict)[0] - self.length
-        if self.rolling_bool:
-            for i in range(first_date, len(self.date_index) - self.length):
-                train_period = self.date_index.date[i:self.length+i]
-                test_period = self.date_index.date[self.length+i]
-                train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
-                test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
-                train_test_list = [train_index, test_index]
-                cv_list.append(train_test_list)
-        else:
-            for i in range(first_date, len(self.date_index) - self.length):
-                train_period = self.date_index.date[:self.length+i]
-                test_period = self.date_index.date[self.length+i]
-                train_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date.isin(train_period)].index
-                test_index = self.df.reset_index()[self.df.reset_index()['date_hour'].dt.date == (test_period)].index
-                train_test_list = [train_index, test_index]
-                cv_list.append(train_test_list)
+
+        # keep the numerical index of the first date to predict and subtract 
+        # the length of the training window. 
+        first_date = np.flatnonzero(
+            self.date_index == self.date_to_predict
+        )[0] - self.length
+
+        # from that first date to predict, generate the indexes of the 
+        # train and test sets until the last day to predcit.
+        for i in range(first_date, len(self.date_index) - self.length):
+            # if rolling_bool is set as True, the training set is built just
+            # from the last self.length days, otherwise the training set is 
+            # built with all previous availbale days.
+            train_period = self.date_index.date[i*self.rolling_bool:self.length+i]
+            test_period = self.date_index.date[self.length+i]
+
+            # keep the numerical indexes for train and test set and add to list
+            train_index = self.df.reset_index()[
+                self.df.reset_index()['date_hour'].dt.date.isin(train_period)
+            ].index
+
+            test_index = self.df.reset_index()[
+                self.df.reset_index()['date_hour'].dt.date == (test_period)
+            ].index
+
+            # add to list and append to sequential cv.
+            train_test_list = [train_index, test_index]
+            cv_list.append(train_test_list)
         
         return cv_list
 
@@ -302,6 +378,7 @@ class timeseries_model(object):
         fig, ax = plt.subplots(1,1, figsize=(10,7))
         self.result_df.hist(column='error', bins=int(np.sqrt(len(self.result_df))), ax=ax,
                             normed=True)
+        ax.grid(linestyle='--', linewidth=1, color='gray', alpha=0.35)
 
     def get_feature_importance(self):
         
@@ -310,7 +387,7 @@ class timeseries_model(object):
                 if hasattr(self.pipeline.steps[-1][-1], 'feature_importances_'):
                     fig, ax = plt.subplots(1,1, figsize=(10,20))
                     pd.DataFrame(self.pipeline.steps[-1][-1].feature_importances_, index=self.features_list
-                        ).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+                        ).sort_values(0, ascending=True).plot.barh(ax=ax, fontsize=16)
                 elif hasattr(self.pipeline.steps[-1][-1], 'coef_'):
                     if hasattr(self.pipeline.steps[-2][-1], 'get_support'):
                         select_feat = self.pipeline.steps[-2][-1].get_support()
@@ -326,6 +403,6 @@ class timeseries_model(object):
             else:
                 fig, ax = plt.subplots(1,1, figsize=(10,20))
                 pd.DataFrame(self.pipeline.feature_importances_, index=self.features_list
-                    ).sort(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+                    ).sort_values(0, ascending=True).plot.barh(ax=ax, fontsize=16)
         except:
             raise ValueError('pipeline has not been fitted.')
