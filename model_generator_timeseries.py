@@ -9,7 +9,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 
 class generate_df(object):
-    """Generate a `pandas.Dataframe` to fit the ML models.
+    """Generate a `pandas.DataFrame` to fit the ML models.
     This class allows to generate a DataFrame from several csv files; these
     files contain the feature values of the Spanish electricity system. 
     In addition, a feature engineering steps over the raw variables is inlcuded.
@@ -22,7 +22,7 @@ class generate_df(object):
     main_name: str
         Name of the target variable for teh ML model.
 
-    completed_df: pandas.Dataframe
+    completed_df: pandas.DataFrame
         DataFrame with target variable, raw and time-dependent fetures. 
     """
 
@@ -80,7 +80,7 @@ class generate_df(object):
         Returns
         -------
         clean_df: pandas.DataFrame
-            Dataframe containing the feature value together with the 
+            DataFrame containing the feature value together with the 
             time-dependent features extracted.
         """
         # dict mapping weekday or fest
@@ -224,8 +224,54 @@ class timeseries_model(object):
     rolling basis cv, check the errors of the model and get the feature 
     importance if available.
 
+    Attributes
+    ----------
+    df: pandas.DataFrame
+        Input DataFrame filtered according to the first date to 
+        consider train set.
 
+    features_list: list
+        List containing the name of the input features for X.
 
+    output: str
+        Name of the targte variable Y for the ML model.
+
+    date_index: pandas.DatetimeIndex
+        DatetimeIndex object from start and end date on a daily basis.
+
+    length: int
+        Number of days used to train the model if the X input is
+        a rolling window.
+
+    pipeline: sklearn.pipeline.Pipeline
+        Pipeline of transformers with final estimators.
+
+    date_to_predict: str
+        First date to predict.
+
+    rolling_bool: bool
+        Boolean flag to indicate if the ML model is trained with 
+        a rolling window.
+
+    cv: list
+        Sequential list containing a list of the numerical indexes 
+        of the train and test set.
+
+    X: numpy array of shape [n_samples, n_features]
+        Training set.
+    
+    Y: numpy array of shape [n_samples]
+        Target values.
+
+    CV_mae, CV_mse: list
+        List of daily mean absolute and squared error for 
+        out-of-samples predictions.
+
+    result_df: pandas.DataFrame
+        DataFrame containinng the target and prediciton values.
+
+    fitted_residuals_std: list
+        Daily standard deviation of the residuals.
     """
 
     def __init__(
@@ -236,7 +282,7 @@ class timeseries_model(object):
         """
         Parameters
         ----------
-        df: pandas.Dataframe
+        df: pandas.DataFrame
             Timeseries input df for the ML model.
 
         features_list: list
@@ -256,7 +302,7 @@ class timeseries_model(object):
             a rolling window.
 
         pipeline: sklearn.pipeline.Pipeline
-            Pipeline of transform with final estimator.
+            Pipeline of transformers with final estimator.
 
         first_date_to_predict: str, dateformat: '%Y-%m-%d', default: '2017-01-01'
             Date after which the model will start yielding predictions.
@@ -343,66 +389,127 @@ class timeseries_model(object):
         return X, Y
 
     def obtain_cv_scores(self):
+        """
+        Generate out-of-sample predictions, calculate standrard deviation of 
+        in-sample residuals and store predictions and the associated error.
+        """
+        # define list of metrics, residuals std dev and output.
         CV_mae = list()
         CV_mse = list()
         fitted_residuals_std = list()
         output_list = list()
 
+        # using the attribute cv of the class, train and test on a rolling basis.
         for fold, (train_index, test_index) in enumerate(self.cv):
             if ((fold+1) % 10) == 0:
                 print('Acting on fold %i' %(fold+1))
+
+            # fit until the corresponding day.
             self.pipeline.fit(self.X[train_index], self.Y[train_index])
-            fitted_residuals_std.append(np.std(np.log1p(self.Y[train_index]) - np.log1p(self.pipeline.predict(self.X[train_index]))))
+
+            # compute the standard deviation of the residuals using 
+            # log transformation.
+            fitted_residuals_std.append(
+                np.std(np.log1p(self.Y[train_index]) - \
+                np.log1p(self.pipeline.predict(self.X[train_index])))
+            )
+
+            # yield prediciton for test day.
             output_pred = self.pipeline.predict(self.X[test_index])
+
+            # store mean absolute and squared error for test day.
             CV_mae.append(mean_absolute_error(self.Y[test_index], output_pred))
             CV_mse.append(mean_squared_error(self.Y[test_index], output_pred))
+
             output_list.append(output_pred)
 
+        # concat all out-of-sample predicitons
         output = np.concatenate(output_list)
 
-        print('Mean absolute error: %0.4f +- %0.4f' %(np.mean(CV_mae), 2*np.std(CV_mae)))
-        print('Mean squared error: %0.4f +- %0.4f' %(np.mean(CV_mse), 2*np.std(CV_mse)))
+        print('Mean absolute error: %0.4f +- %0.4f' \
+            %(np.mean(CV_mae), 2*np.std(CV_mae))
+        )
+        print('Mean squared error: %0.4f +- %0.4f' \
+            %(np.mean(CV_mse), 2*np.std(CV_mse))
+        )
 
         self.CV_mae = CV_mae
         self.CV_mse = CV_mse
 
+        # store true value and oos prediction in result_df attribute
         first_date = np.flatnonzero(self.df.index >= self.date_to_predict)[0]
 
-        self.result_df = pd.DataFrame({'y_true':self.Y[first_date:], 'y_pred':output},
-                                index=self.df.iloc[first_date:].index)
-        self.result_df['error'] = self.result_df['y_true'] - self.result_df['y_pred']
+        self.result_df = pd.DataFrame(
+            {'y_true':self.Y[first_date:], 'y_pred':output},
+            index=self.df.iloc[first_date:].index
+        )
+        self.result_df['error'] = self.result_df['y_true'] - \
+                                  self.result_df['y_pred']
 
         self.fitted_residuals_std = fitted_residuals_std
 
     def plot_histogram_error(self):
+        """
+        Plot histogram of errors for the period predicted
+        """
         fig, ax = plt.subplots(1,1, figsize=(10,7))
-        self.result_df.hist(column='error', bins=int(np.sqrt(len(self.result_df))), ax=ax,
-                            normed=True)
+        self.result_df.hist(
+            column='error', 
+            bins=int(np.sqrt(len(self.result_df))), 
+            ax=ax,
+            normed=True
+        )
         ax.grid(linestyle='--', linewidth=1, color='gray', alpha=0.35)
 
     def get_feature_importance(self):
-        
+        """
+        Obtain the feature importance for those models that have the possibility.
+        """
         try:
             if hasattr(self.pipeline, 'steps'):
+
                 if hasattr(self.pipeline.steps[-1][-1], 'feature_importances_'):
+                    # pipeline with steps and estimator has attribute 
+                    # feature_importances
                     fig, ax = plt.subplots(1,1, figsize=(10,20))
-                    pd.DataFrame(self.pipeline.steps[-1][-1].feature_importances_, index=self.features_list
-                        ).sort_values(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+                    pd.DataFrame(
+                        self.pipeline.steps[-1][-1].feature_importances_, 
+                        index=self.features_list
+                    ).sort_values(0, ascending=True).plot.barh(
+                        ax=ax, fontsize=16
+                    )
+
                 elif hasattr(self.pipeline.steps[-1][-1], 'coef_'):
+
                     if hasattr(self.pipeline.steps[-2][-1], 'get_support'):
+                        # pipeline with steps and estimators is parametric
+                        # and it also has an intermediate step with feature 
+                        # selection
+
                         select_feat = self.pipeline.steps[-2][-1].get_support()
-                        df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
+                        df = pd.DataFrame(
+                            [self.pipeline.steps[-1][-1].intercept_] + 
                             self.pipeline.steps[-1][-1].coef_.tolist(), 
-                            index=['intercept'] + list(compress(self.features_list, select_feat)))
+                            index=['intercept'] + \
+                            list(compress(self.features_list, select_feat))
+                        )
                         print(df)
+
                     else:
-                        df = pd.DataFrame([self.pipeline.steps[-1][-1].intercept_] + 
-                            self.pipeline.steps[-1][-1].coef_.tolist(), index=['intercept'] + 
-                            self.features_list)
+                        # pipeline with steps and estimators is parametric
+                        df = pd.DataFrame(
+                            [self.pipeline.steps[-1][-1].intercept_] + 
+                            self.pipeline.steps[-1][-1].coef_.tolist(), 
+                            index=['intercept'] + self.features_list)
                         print(df)
+
             else:
+                # pipeline without steps
                 fig, ax = plt.subplots(1,1, figsize=(10,20))
-                pd.DataFrame(self.pipeline.feature_importances_, index=self.features_list
-                    ).sort_values(0, ascending=True).plot.barh(ax=ax, fontsize=16)
+                pd.DataFrame(
+                    self.pipeline.feature_importances_, 
+                    index=self.features_list
+                ).sort_values(0, ascending=True).plot.barh(ax=ax, fontsize=16)
         except:
+
             raise ValueError('pipeline has not been fitted.')
