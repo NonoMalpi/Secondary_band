@@ -272,6 +272,10 @@ class timeseries_model(object):
 
     fitted_residuals_std: list
         Daily standard deviation of the residuals.
+
+    hourly_residuals: pandas.DataFrame
+        DataFrame containing standard deviation of the residuals
+        on a daily basis.
     """
 
     def __init__(
@@ -397,6 +401,7 @@ class timeseries_model(object):
         CV_mae = list()
         CV_mse = list()
         fitted_residuals_std = list()
+        hourly_residuals = list()
         output_list = list()
 
         # using the attribute cv of the class, train and test on a rolling basis.
@@ -409,9 +414,24 @@ class timeseries_model(object):
 
             # compute the standard deviation of the residuals using 
             # log transformation.
+            aux_residuals = self.df.iloc[train_index]
+            aux_residuals.loc[:, 'in_sample_pred'] = self.pipeline.predict(
+                self.X[train_index]
+            )
+
+            aux_residuals.loc[:, 'log_residual'] = \
+                np.log1p(aux_residuals[self.output]) - \
+                np.log1p(aux_residuals['in_sample_pred'])
+
+            residuals = aux_residuals.groupby('hour')[['log_residual']].std().\
+            rename(
+                columns={'log_residual':aux_residuals['date'].iloc[-1]}
+            )
+
+            hourly_residuals.append(residuals)
+
             fitted_residuals_std.append(
-                np.std(np.log1p(self.Y[train_index]) - \
-                np.log1p(self.pipeline.predict(self.X[train_index])))
+                np.std(aux_residuals['log_residual'])
             )
 
             # yield prediciton for test day.
@@ -447,6 +467,7 @@ class timeseries_model(object):
                                   self.result_df['y_pred']
 
         self.fitted_residuals_std = fitted_residuals_std
+        self.hourly_residuals = pd.concat(hourly_residuals, axis=1)
 
     def plot_histogram_error(self):
         """
